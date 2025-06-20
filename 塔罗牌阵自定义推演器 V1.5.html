@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>塔罗牌阵自定义推演器</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-colour: #2c3e50;
+            --secondary-colour: #8b7355;
+            --accent-colour: #d4af37;
+            --background-colour: #f5f3f0;
+            --card-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            --hover-shadow: 0 8px 16px rgba(0,0,0,0.3);
+            --selection-outline: 2px solid #3498db; 
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Microsoft YaHei', 'SimSun', sans-serif; background-color: var(--background-colour); color: var(--primary-colour); line-height: 1.6; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+        header { text-align: center; margin-bottom: 30px; padding: 20px; background: linear-gradient(135deg, var(--primary-colour), var(--secondary-colour)); color: white; border-radius: 10px; box-shadow: var(--card-shadow); }
+        h1 { font-size: 2.5rem; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .subtitle { font-style: italic; opacity: 0.9; }
+        .tabs { display: flex; justify-content: center; margin-bottom: 30px; background: white; border-radius: 30px; padding: 5px; box-shadow: var(--card-shadow); }
+        .tab { padding: 12px 30px; cursor: pointer; background: none; border: none; font-size: 1.1rem; color: var(--primary-colour); border-radius: 25px; transition: all 0.3s ease; font-weight: 500; }
+        .tab.active { background: var(--accent-colour); color: white; box-shadow: 0 2px 10px rgba(212, 175, 55, 0.4); }
+        .tab:hover:not(.active) { background: rgba(212, 175, 55, 0.1); }
+        .tab-content { display: none; animation: fadeIn 0.5s ease; }
+        .tab-content.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .spread-maker { display: grid; grid-template-columns: 300px 1fr; gap: 20px; height: 80vh; }
+        .controls-panel { background: white; padding: 20px; border-radius: 10px; box-shadow: var(--card-shadow); overflow-y: auto; }
+        .control-section { margin-bottom: 25px; }
+        .control-section h3 { color: var(--secondary-colour); margin-bottom: 10px; font-size: 1.2rem; }
+        
+        .spread-canvas { background: #fff; border-radius: 10px; box-shadow: var(--card-shadow); position: relative; overflow: hidden; cursor: grab; }
+        .spread-canvas.panning { cursor: grabbing; }
+        #world { position: absolute; width: 10000px; height: 10000px; background-color: #fdfdfa; background-image: linear-gradient(rgba(139, 115, 85, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(139, 115, 85, 0.1) 1px, transparent 1px); background-size: 30px 30px; transform-origin: 0 0; }
+        
+        .tarot-card, .position-marker { position: absolute; cursor: move; user-select: none; transition: box-shadow 0.3s ease, outline 0.2s ease; border-radius: 8px; overflow: hidden; box-shadow: var(--card-shadow); }
+        .tarot-card:hover, .position-marker:hover { box-shadow: var(--hover-shadow); z-index: 100; }
+        .tarot-card.selected, .position-marker.selected { outline: var(--selection-outline); z-index: 99; }
+        .tarot-card.dragging, .position-marker.dragging { opacity: 0.8; z-index: 1000; }
+        .tarot-card { width: 197px; height: 342px; background: white; }
+        .position-marker { width: 207px; height: 352px; background: rgba(212, 175, 55, 0.2); border: 2px dashed var(--accent-colour); display: flex; align-items: center; justify-content: center; font-size: 14px; color: var(--secondary-colour); font-weight: bold; padding: 5px; text-align: center; }
+        
+        .card-image { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
+        .btn { padding: 10px 20px; background: var(--accent-colour); color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 1rem; transition: all 0.3s ease; margin-right: 10px; margin-bottom: 10px; }
+        .btn:hover { background: #b8941f; transform: translateY(-2px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .btn:disabled { background: #ccc; cursor: not-allowed; transform: none; box-shadow: none; }
+        .btn.secondary { background: var(--secondary-colour); }
+        .btn.secondary:hover:not(:disabled) { background: #6d5a44; }
+        .btn.danger { background: #e74c3c; }
+        .btn.danger:hover:not(:disabled) { background: #c0392b; }
+        .btn.small { padding: 5px 10px; font-size: 0.8rem; margin-top: 5px; }
+        select, input[type="number"], input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ddd; border-radius: 5px; font-size: 1rem; margin-top: 5px; }
+        .card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; padding: 20px; }
+        .card-item { background: white; border-radius: 8px; padding: 10px; text-align: center; transition: all 0.3s ease; box-shadow: var(--card-shadow); display: flex; flex-direction: column; align-items: center; }
+        .card-item .image-container { cursor: pointer; }
+        .card-item:hover { transform: translateY(-5px); box-shadow: var(--hover-shadow); }
+        .card-item img { width: 100%; max-width: 120px; height: 140px; object-fit: cover; border-radius: 4px; margin-bottom: 5px; border: 1px solid #eee; }
+        .card-item h4 { font-size: 0.9rem; color: var(--primary-colour); margin-bottom: 5px; }
+        .card-item .upload-actions { margin-top: 5px; display: flex; flex-direction: column; gap: 5px; width: 100%; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); z-index: 2000; animation: fadeIn 0.3s ease; }
+        .modal-content { position: relative; background: white; max-width: 800px; margin: 50px auto; padding: 30px; border-radius: 10px; max-height: 80vh; overflow-y: auto; animation: slideIn 0.3s ease; }
+        @keyframes slideIn { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        .close-modal { position: absolute; top: 10px; right: 10px; font-size: 2rem; cursor: pointer; color: #999; transition: color 0.3s ease; }
+        .close-modal:hover { color: #333; }
+        .spread-templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; margin-top: 20px; }
+        .template-card { background: #f9f9f9; padding: 15px; border-radius: 8px; text-align: center; cursor: pointer; transition: all 0.3s ease; border: 2px solid transparent; position: relative; }
+        .template-card:hover { border-color: var(--accent-colour); transform: translateY(-3px); box-shadow: var(--hover-shadow); }
+        .template-preview { width: 100%; height: 150px; background: white; border-radius: 4px; margin-bottom: 10px; position: relative; overflow: hidden; }
+        .mini-card { position: absolute; width: 20px; height: 30px; background: var(--secondary-colour); border-radius: 2px; }
+        .visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
+        
+        .template-card.custom { background-color: #f0f3f5; }
+        .delete-template-btn { position: absolute; top: 5px; right: 5px; width: 24px; height: 24px; border: none; background: #e74c3c; color: white; border-radius: 50%; cursor: pointer; font-size: 14px; line-height: 24px; text-align: center; opacity: 0; transition: opacity 0.2s ease; }
+        .template-card:hover .delete-template-btn { opacity: 1; }
+        .delete-template-btn:hover { background: #c0392b; }
+        
+        #cropModal .modal-content { max-width: 600px; } #imagePreviewContainer { text-align: center; margin-bottom: 20px; } #imageToProcess { max-width: 100%; max-height: 40vh; border: 1px solid #ddd; } #cropContainer { display: none; width: 100%; max-height: 50vh; margin-bottom: 20px; } #cropContainer img { display: block; max-width: 100%; } .crop-actions { text-align: right; }
+        
+        @media (max-width: 768px) { .spread-maker { grid-template-columns: 1fr; height: auto; } .controls-panel { order: 2; } .spread-canvas { height: 60vh; order: 1; } .card-grid { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); } }
+    </style>
+</head>
+<body>
+    <div class="container"> <header> 
+        <h1>塔罗牌阵自定义推演器</h1>
+        <p class="subtitle">星罗工作室 制作</p>
+    </header> <div class="tabs"> <button class="tab active" onclick="switchTab('maker')">牌阵制作</button> <button class="tab" onclick="switchTab('info')">牌面信息</button> <button class="tab" onclick="switchTab('spreads')">常见牌阵</button> </div> <div id="maker" class="tab-content active"> <div class="spread-maker"> <div class="controls-panel"> <div class="control-section"> <h3>画布操作</h3> <button class="btn" onclick="showTemplates()">加载模板</button> <button class="btn secondary" onclick="clearCanvas()">清空画布</button> <button class="btn secondary" onclick="resetView()">重置视图</button> <button class="btn danger" id="deleteSelectedButton" onclick="deleteSelectedElement()" disabled>删除选中项</button> </div> <div class="control-section"> <h3>牌阵文件</h3> <input type="file" id="importSpreadInput" class="visually-hidden" accept=".json" onchange="handleImportSpread(event)"> <label for="importSpreadInput" class="btn">导入牌阵 (JSON)</label> <button class="btn" onclick="saveSpread()">保存牌阵 (JSON)</button> <button class="btn" id="saveAsTemplateBtn" onclick="saveCurrentSpreadAsTemplate()" style="margin-top: 10px;">将当前布局存为模板</button> </div> <div class="control-section"> <h3>添加位置标记</h3> <label>位置编号：</label> <input type="number" id="positionNumber" min="1" max="20" value="1"> <label>位置含义：</label> <input type="text" id="positionMeaning" placeholder="例如：当前状况"> <button class="btn" onclick="addPosition()">添加位置</button> </div> <div class="control-section"> <h3>选择塔罗牌</h3> <label>选择牌面：</label> <select id="cardSelect"><option value="">请选择一张牌...</option></select> <label>旋转角度：</label> <input type="number" id="rotation" min="0" max="360" value="0" step="15"> <label><input type="checkbox" id="reversed"> 逆位</label> <button class="btn" onclick="addCard()">添加牌面</button> </div> <div class="control-section"> <h3>自定义图片</h3> <input type="file" id="batchUploadInput" class="visually-hidden" accept="image/*" multiple onchange="handleBatchUpload(event)"> <label for="batchUploadInput" class="btn">批量上传牌面</label> <button class="btn secondary" onclick="clearAllCustomImages()">清除所有自定义图片</button> <button class="btn danger" onclick="clearAllData()" style="margin-top: 10px;">清除所有数据 (恢复出厂)</button> </div><div class="control-section"> <h3>导出为图片</h3> <button class="btn secondary" onclick="exportImage()">导出为图片</button> <button class="btn secondary" onclick="copyAsImage()">复制为图片</button> </div> </div> <div class="spread-canvas" id="canvas-viewport"> <div id="world"></div> </div> </div> </div> <div id="info" class="tab-content"> <h2 style="text-align: center; margin-bottom: 20px; color: var(--secondary-colour);">大阿尔卡那</h2> <div class="card-grid" id="majorArcana"></div> <h2 style="text-align: center; margin: 30px 0 20px 0; color: var(--secondary-colour);">小阿尔卡那</h2> <div class="card-grid" id="minorArcana"></div> </div> <div id="spreads" class="tab-content"> <h2 style="text-align: center; margin-bottom: 20px; color: var(--secondary-colour);">常见塔罗牌阵</h2> <div class="spread-templates" id="commonSpreads"></div> </div> </div>
+    <div id="templateModal" class="modal"> <div class="modal-content"> <span class="close-modal" onclick="closeModal('templateModal')">&times;</span> <h2>选择一个牌阵模板</h2> <div class="spread-templates" id="templateList"></div> </div> </div>
+    <div id="cardModal" class="modal"> <div class="modal-content"> <span class="close-modal" onclick="closeModal('cardModal')">&times;</span> <div id="cardDetail"></div> </div> </div>
+    <div id="cropModal" class="modal"> <div class="modal-content"> <span class="close-modal" onclick="closeCropModal()">&times;</span> <h2>调整图片</h2> <div id="imagePreviewContainer"> <p>请选择如何将图片放入卡牌：</p> <img id="imageToProcess" src="" alt="图片预览"> <div class="crop-actions" style="margin-top: 15px;"> <button class="btn" onclick="processFit()">适应卡牌 (保留完整图片)</button> <button class="btn" onclick="initCropper()">填充卡牌 (裁剪图片)</button> </div> </div> <div id="cropContainer"> <img id="imageToCrop" src="" alt="待裁剪图片"> </div> <div class="crop-actions" id="cropSaveActions" style="display: none;"> <button class="btn secondary" onclick="closeCropModal()">取消</button> <button class="btn" id="cropAndSaveButton">确认裁剪</button> </div> </div> </div>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.5.13/cropper.min.js"></script>
+    <script>
+        const majorArcana = [{id:0,name:"愚者",engName:"The Fool",meaning:"新的开始，天真，自发性",reversed:"鲁莽，冒险，愚蠢",customImageSrc:null},{id:1,name:"魔术师",engName:"The Magician",meaning:"显化，资源丰富，力量",reversed:"操纵，计划不周，未开发的才能",customImageSrc:null},{id:2,name:"女祭司",engName:"The High Priestess",meaning:"直觉，神圣知识，女性力量",reversed:"秘密，与直觉脱节，退缩",customImageSrc:null},{id:3,name:"女皇",engName:"The Empress",meaning:"女性气质，美丽，自然，富足",reversed:"创作障碍，依赖他人",customImageSrc:null},{id:4,name:"皇帝",engName:"The Emperor",meaning:"权威，建立，结构",reversed:"暴政，刚性，冷漠",customImageSrc:null},{id:5,name:"教皇",engName:"The Hierophant",meaning:"精神智慧，宗教信仰，传统",reversed:"个人信仰，自由，挑战现状",customImageSrc:null},{id:6,name:"恋人",engName:"The Lovers",meaning:"爱情，和谐，关系，价值观",reversed:"不和谐，失衡，价值观不合",customImageSrc:null},{id:7,name:"战车",engName:"The Chariot",meaning:"控制，意志力，成功，决心",reversed:"缺乏控制，缺乏方向，侵略性",customImageSrc:null},{id:8,name:"力量",engName:"Strength",meaning:"内在力量，勇气，耐心，控制",reversed:"自我怀疑，软弱，不安全感",customImageSrc:null},{id:9,name:"隐士",engName:"The Hermit",meaning:"灵魂探索，内省，内在指引",reversed:"孤立，孤独，退缩",customImageSrc:null},{id:10,name:"命运之轮",engName:"Wheel of Fortune",meaning:"好运，业力，生命周期，命运",reversed:"厄运，缺乏控制，执着于控制",customImageSrc:null},{id:11,name:"正义",engName:"Justice",meaning:"公正，公平，真相，法律",reversed:"不公，缺乏责任感，不诚实",customImageSrc:null},{id:12,name:"倒吊人",engName:"The Hanged Man",meaning:"暂停，限制，放手",reversed:"犹豫不决，延迟，抵抗",customImageSrc:null},{id:13,name:"死神",engName:"Death",meaning:"结束，开始，改变，转变",reversed:"抗拒改变，无法前进",customImageSrc:null},{id:14,name:"节制",engName:"Temperance",meaning:"平衡，节制，耐心，目的",reversed:"失衡，过度，缺乏长远眼光",customImageSrc:null},{id:15,name:"恶魔",engName:"The Devil",meaning:"束缚，上瘾，性欲，物质主义",reversed:"释放限制性信念，探索黑暗想法",customImageSrc:null},{id:16,name:"高塔",engName:"The Tower",meaning:"突然改变，动荡，混乱，启示",reversed:"个人转变，恐惧改变",customImageSrc:null},{id:17,name:"星星",engName:"The Star",meaning:"希望，信仰，目的，更新，灵性",reversed:"缺乏信仰，绝望，沮丧",customImageSrc:null},{id:18,name:"月亮",engName:"The Moon",meaning:"幻觉，恐惧，焦虑，潜意识",reversed:"释放恐惧，压抑的情绪，内心困惑",customImageSrc:null},{id:19,name:"太阳",engName:"The Sun",meaning:"快乐，成功，庆祝，积极",reversed:"内在的孩子，感到沮丧",customImageSrc:null},{id:20,name:"审判",engName:"Judgement",meaning:"反思，清算，内在召唤",reversed:"自我怀疑，无法原谅",customImageSrc:null},{id:21,name:"世界",engName:"The World",meaning:"完成，成就，旅行，统一",reversed:"未完成，没有结束",customImageSrc:null}];
+        const suits=["权杖","圣杯","宝剑","金币"],suitEngNames=["Wands","Cups","Swords","Pentacles"],courtCards=["侍从","骑士","王后","国王"],courtEngNames=["Page","Knight","Queen","King"],minorArcana=[];suits.forEach((a,b)=>{for(let c=1;c<=10;c++){let d=1===c?`${a}王牌`:`${a}${c}`,e=1===c?`Ace of ${suitEngNames[b]}`:`${c} of ${suitEngNames[b]}`;minorArcana.push({id:minorArcana.length+22,name:d,engName:e,suit:a,suitEng:suitEngNames[b],number:c,customImageSrc:null})}courtCards.forEach((c,d)=>{minorArcana.push({id:minorArcana.length+22,name:`${a}${c}`,engName:`${courtEngNames[d]} of ${suitEngNames[b]}`,suit:a,suitEng:suitEngNames[b],court:c,customImageSrc:null})})});const allCards=[...majorArcana,...minorArcana];
+        const spreadTemplates={threeCard:{name:"三牌阵",positions:[{num:1,meaning:"过去",x:4500,y:4800},{num:2,meaning:"现在",x:5000,y:4800},{num:3,meaning:"未来",x:5500,y:4800}]},celticCross:{name:"凯尔特十字",positions:[{num:1,meaning:"当前状况",x:4900,y:4800},{num:2,meaning:"挑战/交叉",x:4900,y:4800,rotation:90},{num:3,meaning:"遥远的过去",x:4900,y:5200},{num:4,meaning:"最近的过去",x:4500,y:4800},{num:5,meaning:"可能的未来",x:4900,y:4400},{num:6,meaning:"近期未来",x:5300,y:4800},{num:7,meaning:"你的态度",x:5700,y:5300},{num:8,meaning:"外部影响",x:5700,y:5000},{num:9,meaning:"希望与恐惧",x:5700,y:4700},{num:10,meaning:"结果",x:5700,y:4400}]},horseshoe:{name:"马蹄铁牌阵",positions:[{num:1,meaning:"过去",x:4500,y:5200},{num:2,meaning:"现在",x:4800,y:4800},{num:3,meaning:"隐藏的影响",x:5100,y:4600},{num:4,meaning:"障碍",x:5400,y:4800},{num:5,meaning:"建议",x:5700,y:5200}]}};
+        
+        let customSpreadTemplates = {};
+        let isDraggingElement = false, isPanning = false;
+        let draggedElement = null, dragStartElementPos = {x: 0, y: 0};
+        let dragStartMousePos = {x: 0, y: 0};
+        let cardPositions = [], placedCards = [];
+        let selectedElementOnCanvas = null;
+        const SNAP_GRID_SIZE = 30;
+        let scale = 1.0, panX = 0, panY = 0;
+        let cropper = null;
+        let currentCardIdForCropping = null;
+        let sourceImageForProcessing = null;
+        const TAROT_CARD_WIDTH = 197;
+        const TAROT_CARD_HEIGHT = 342;
+        const TAROT_CARD_ASPECT_RATIO = TAROT_CARD_WIDTH / TAROT_CARD_HEIGHT;
+        const DB_NAME = "tarotAppDB", DB_VERSION = 1, STORE_NAME = "customImages";
+        let db;
+
+        function initDB() { return new Promise((resolve, reject) => { const request = indexedDB.open(DB_NAME, DB_VERSION); request.onerror = event => reject("IndexedDB error: " + event.target.errorCode); request.onsuccess = event => { db = event.target.result; resolve(db); }; request.onupgradeneeded = event => { const db = event.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) { db.createObjectStore(STORE_NAME, { keyPath: 'id' }); } }; }); }
+        function dbSet(data) { return new Promise((resolve, reject) => { if (!db) return reject("DB not initialized."); const transaction = db.transaction([STORE_NAME], 'readwrite'); const store = transaction.objectStore(STORE_NAME); const request = store.put(data); request.onsuccess = () => resolve(request.result); request.onerror = event => reject("DB set error: " + event.target.error); }); }
+        function dbGetAll() { return new Promise((resolve, reject) => { if (!db) return reject("DB not initialized."); const transaction = db.transaction([STORE_NAME], 'readonly'); const store = transaction.objectStore(STORE_NAME); const request = store.getAll(); request.onsuccess = () => resolve(request.result); request.onerror = event => reject("DB get all error: " + event.target.error); }); }
+        function dbDelete(key) { return new Promise((resolve, reject) => { if (!db) return reject("DB not initialized."); const transaction = db.transaction([STORE_NAME], 'readwrite'); const store = transaction.objectStore(STORE_NAME); const request = store.delete(key); request.onsuccess = () => resolve(request.result); request.onerror = event => reject("DB delete error: " + event.target.error); }); }
+        function dbClear() { return new Promise((resolve, reject) => { if (!db) return reject("DB not initialized."); const transaction = db.transaction([STORE_NAME], 'readwrite'); const store = transaction.objectStore(STORE_NAME); const request = store.clear(); request.onsuccess = () => resolve(request.result); request.onerror = event => reject("DB clear error: " + event.target.error); }); }
+
+        window.onload = async function() {
+            try { await initDB(); await loadCustomImages(); } catch(e) { console.error("Failed to initialize database:", e); alert("无法初始化数据库，自定义图片功能可能无法使用。"); }
+            loadCustomTemplates(); populateCardSelect(); populateCardGrids(); populateCommonSpreads(); setupCanvasInteractions();
+            document.getElementById('cropAndSaveButton').addEventListener('click', processCrop);
+            document.addEventListener('click', function(e) { if (e.target && e.target.classList.contains('delete-template-btn')) { const templateName = e.target.dataset.templateName; deleteCustomTemplate(templateName); } });
+            resetView();
+        };
+
+        async function loadCustomImages() { try { const images = await dbGetAll(); images.forEach(imgData => { const card = allCards.find(c => c.id === imgData.id); if (card) { card.customImageSrc = URL.createObjectURL(imgData.imageBlob); } }); } catch (e) { console.error("Failed to load images from DB:", e); } }
+        async function saveCustomImage(cardId, imageBlob) { const card = allCards.find(c => c.id === cardId); if (!card) return false; try { await dbSet({ id: cardId, imageBlob: imageBlob }); if (card.customImageSrc && card.customImageSrc.startsWith('blob:')) { URL.revokeObjectURL(card.customImageSrc); } card.customImageSrc = URL.createObjectURL(imageBlob); return true; } catch (e) { console.error("Failed to save image to DB:", e); alert("保存图片失败！请检查浏览器控制台获取详细信息。"); return false; } }
+        function processFit() { if (!sourceImageForProcessing || currentCardIdForCropping === null) return; generateFittedImage(sourceImageForProcessing, 'blob').then(async (imageBlob) => { if (await saveCustomImage(currentCardIdForCropping, imageBlob)) { updateUIAfterSave(currentCardIdForCropping); } closeCropModal(); }); }
+        async function handleBatchUpload(event) { const files = event.target.files; if (!files.length) return; const confirmed = confirm( "批量上传说明：\n\n" + "请确保您的图片文件名以卡牌的ID命名，例如 '0.png', '22.jpg' 等。\n" + "程序将自动匹配ID并更新牌面。命名不正确的文件将被忽略。\n\n" + "是否继续？" ); if (!confirmed) { event.target.value = null; return; } let successCount = 0; const failedFiles = []; for (const file of files) { const fileName = file.name; const cardId = parseInt(fileName.split('.')[0], 10); if (isNaN(cardId) || !allCards.find(c => c.id === cardId)) { failedFiles.push(fileName); continue; } try { const fittedImageBlob = await generateFittedImage(file, 'blob'); if (await saveCustomImage(cardId, fittedImageBlob)) { successCount++; } else { failedFiles.push(fileName); } } catch (error) { console.error("Error processing file:", fileName, error); failedFiles.push(fileName); } } populateCardGrids(); updateAllCardsOnCanvas(); let reportMessage = `批量上传完成！\n\n成功更新 ${successCount} 张卡牌。`; if (failedFiles.length > 0) { reportMessage += `\n\n共 ${failedFiles.length} 个文件处理失败或被跳过。请检查命名。`; } alert(reportMessage); event.target.value = null; }
+        function generateFittedImage(imageSource, outputType = 'blob') { return new Promise((resolve, reject) => { const img = new Image(); img.onload = () => { const canvas = document.createElement('canvas'); canvas.width = TAROT_CARD_WIDTH; canvas.height = TAROT_CARD_HEIGHT; const ctx = canvas.getContext('2d'); const hRatio = canvas.width / img.width; const vRatio = canvas.height / img.height; const ratio = Math.min(hRatio, vRatio); const centerX = (canvas.width - img.width * ratio) / 2; const centerY = (canvas.height - img.height * ratio) / 2; ctx.drawImage(img, 0, 0, img.width, img.height, centerX, centerY, img.width * ratio, img.height * ratio); if (outputType === 'blob') { canvas.toBlob(blob => resolve(blob), 'image/png'); } else { resolve(canvas.toDataURL('image/png')); } }; img.onerror = reject; if (typeof imageSource === 'string') { img.src = imageSource; } else { img.src = URL.createObjectURL(imageSource); } }); }
+        function processCrop() { if (!cropper || currentCardIdForCropping === null) return; const canvas = cropper.getCroppedCanvas({ width: TAROT_CARD_WIDTH * 2, height: TAROT_CARD_HEIGHT * 2, imageSmoothingEnabled: true, imageSmoothingQuality: 'high' }); canvas.toBlob(async (blob) => { if (await saveCustomImage(currentCardIdForCropping, blob)) { updateUIAfterSave(currentCardIdForCropping); } closeCropModal(); }, 'image/png'); }
+        async function clearCustomImage(cardId) { const card = allCards.find(c => c.id === cardId); if (card) { try { await dbDelete(cardId); if (card.customImageSrc && card.customImageSrc.startsWith('blob:')) { URL.revokeObjectURL(card.customImageSrc); } card.customImageSrc = null; updateUIAfterSave(cardId); } catch (e) { console.error("Failed to delete image from DB:", e); } } }
+        async function clearAllCustomImages() { if (!confirm("确定要清除所有自定义塔罗牌图片吗？此操作不可撤销。")) return; try { await dbClear(); allCards.forEach(card => { if (card.customImageSrc && card.customImageSrc.startsWith('blob:')) { URL.revokeObjectURL(card.customImageSrc); } card.customImageSrc = null; }); populateCardGrids(); updateAllCardsOnCanvas(); alert("所有自定义图片已清除。"); } catch(e) { alert("清除图片失败，请查看控制台。"); } }
+        async function clearAllData() { if (!confirm("警告：此操作将删除所有已保存的自定义牌面和自定义牌阵模板，且无法恢复！\n\n您确定要恢复出厂设置吗？")) return; await clearAllCustomImages(); customSpreadTemplates = {}; localStorage.removeItem('customTarotSpreads'); populateAllTemplateLists(); alert("所有自定义数据已清除。应用已恢复至初始状态。"); }
+        function updateUIAfterSave(cardId) { const imgElement = document.getElementById(`card-img-${cardId}`); const card = allCards.find(c => c.id === cardId); if (imgElement && card) { imgElement.src = card.customImageSrc || `data:image/svg+xml,${encodeURIComponent(generateDetailedCardSVG(card))}`; } const cardItemElement = document.getElementById(`card-item-${cardId}`); const parentGrid = cardItemElement.parentNode; if(cardItemElement && parentGrid) parentGrid.replaceChild(createCardDisplay(card), cardItemElement); updateAllCardsOnCanvas(); }
+        
+        function updateWorldTransform(){document.getElementById("world").style.transform=`translate(${panX}px, ${panY}px) scale(${scale})`}function initCropper(){sourceImageForProcessing&&(document.getElementById("imagePreviewContainer").style.display="none",document.getElementById("cropContainer").style.display="block",document.getElementById("cropSaveActions").style.display="block",imageToCropElement=document.getElementById("imageToCrop"),imageToCropElement.src=sourceImageForProcessing,cropper&&cropper.destroy(),cropper=new Cropper(imageToCropElement,{aspectRatio:TAROT_CARD_ASPECT_RATIO,viewMode:1,dragMode:"move",background:!1,autoCropArea:1,responsive:!0,checkCrossOrigin:!1}))}function closeCropModal(){cropper&&(cropper.destroy(),cropper=null),document.getElementById("cropModal").style.display="none",currentCardIdForCropping=null,sourceImageForProcessing=null}
+        function updateAllCardsOnCanvas(){placedCards.forEach(a=>{const b=allCards.find(c=>c.id===a.card.id);if(b){const c=a.element.querySelector(".card-image");c&&(c.src=b.customImageSrc||`data:image/svg+xml,${encodeURIComponent(generateDetailedCardSVG(b))}`)}})}function switchTab(a){document.querySelectorAll(".tab").forEach(b=>b.classList.remove("active")),document.querySelectorAll(".tab-content").forEach(b=>b.classList.remove("active")),event.target.classList.add("active"),document.getElementById(a).classList.add("active")}function populateCardSelect(){const a=document.getElementById("cardSelect");a.innerHTML='<option value="">请选择一张牌...</option>';const b=document.createElement("optgroup");b.label="大阿尔卡那",majorArcana.forEach(c=>{const d=document.createElement("option");d.value=c.id,d.textContent=`${c.id}. ${c.name}`,b.appendChild(d)}),a.appendChild(b),suits.forEach(c=>{const d=document.createElement("optgroup");d.label=c,minorArcana.filter(e=>e.suit===c).forEach(e=>{const f=document.createElement("option");f.value=e.id,f.textContent=e.name,d.appendChild(f)}),a.appendChild(d)})}function populateCardGrids(){const a=document.getElementById("majorArcana"),b=document.getElementById("minorArcana");a.innerHTML="",b.innerHTML="",majorArcana.forEach(c=>a.appendChild(createCardDisplay(c))),minorArcana.forEach(c=>b.appendChild(createCardDisplay(c)))}
+        function createCardDisplay(a){const b=document.createElement("div");b.className="card-item",b.id=`card-item-${a.id}`;const c=document.createElement("div");c.className="image-container",c.onclick=()=>showCardDetail(a);const d=document.createElement("img");d.src=a.customImageSrc||`data:image/svg+xml,${encodeURIComponent(generateDetailedCardSVG(a))}`,d.alt=a.name,d.id=`card-img-${a.id}`,c.appendChild(d);const e=document.createElement("h4");e.textContent=a.name;const f=document.createElement("div");f.className="upload-actions";const g=`file-input-${a.id}`,h=document.createElement("input");h.type="file",h.accept="image/*",h.className="visually-hidden",h.id=g,h.onchange=i=>handleImageUpload(i,a.id);const j=document.createElement("label");return j.htmlFor=g,j.className="btn btn-small",j.textContent="上传图片",f.appendChild(h),f.appendChild(j),a.customImageSrc&&(k=document.createElement("button"),k.className="btn btn-small secondary",k.textContent="清除图片",k.onclick=()=>clearCustomImage(a.id),f.appendChild(k)),b.appendChild(c),b.appendChild(e),b.appendChild(f),b}
+        function generateDetailedCardSVG(a){const b=22<=a.id,c=b?getSuitColor(a.suitEng||a.suit):"#2c3e50",d={0:"☉",1:"🃁",2:"☽",3:"♀",4:"♂",5:"✚",6:"♥",7:"☸",8:"♌",9:"램",10:"☯",11:"⚖",12:"⊥",13:"☠",14:"☮",15:"⛤",16:"⚡",17:"✦",18:"☽",19:"☉",20:"✠",21:"⊕"},e={Wands:"🔥",Cups:"💧",Swords:"⚔️",Pentacles:"⭐"};let f=`<svg width="197" height="342" xmlns="http://www.w3.org/2000/svg"><defs><linearGradient id="gradSVG${a.id}" x1="0%" y1="0%" x2="100%" y2="100%"><stop offset="0%" style="stop-color:${c};stop-opacity:0.8" /><stop offset="100%" style="stop-color:${c};stop-opacity:1" /></linearGradient></defs><rect width="197" height="342" fill="url(#gradSVG${a.id})" rx="8"/><rect x="5" y="5" width="187" height="332" fill="none" stroke="white" stroke-width="2" rx="4"/>`;return b?(()=>{const b=e[a.suitEng]||"♦";a.number?f+=`<text x="98.5" y="60" text-anchor="middle" fill="white" font-size="48" font-weight="bold">${getRomanNumeral(a.number)}</text><text x="98.5" y="171" text-anchor="middle" fill="white" font-size="60">${b}</text><text x="98.5" y="280" text-anchor="middle" fill="white" font-size="24">${a.name}</text>`:f+=`<text x="98.5" y="60" text-anchor="middle" fill="white" font-size="32" font-weight="bold">${a.court}</text><text x="98.5" y="171" text-anchor="middle" fill="white" font-size="60">${b}</text><text x="98.5" y="280" text-anchor="middle" fill="white" font-size="24">${a.suit}</text>`})():f+=`<text x="98.5" y="40" text-anchor="middle" fill="white" font-size="24" font-weight="bold">${a.id}</text><text x="98.5" y="171" text-anchor="middle" fill="white" font-size="80">${d[a.id]||"✦"}</text><text x="98.5" y="280" text-anchor="middle" fill="white" font-size="28" font-weight="bold">${a.name}</text>`,f+="</svg>",f}
+        function getSuitColor(a){const b={Wands:"#d35400",权杖:"#d35400",Cups:"#3498db",圣杯:"#3498db",Swords:"#7f8c8d",宝剑:"#7f8c8d",Pentacles:"#27ae60",金币:"#27ae60"};return b[a]||"#2c3e50"}function getRomanNumeral(a){const b=["","I","II","III","IV","V","VI","VII","VIII","IX","X"];return b[a]||a}
+        function addElementToWorld(a){const b=document.getElementById("canvas-viewport"),c=document.getElementById("world"),d=b.clientWidth/2,e=b.clientHeight/2,f=(d-panX)/scale,g=(e-panY)/scale;a.style.left=`${f-a.clientWidth/2}px`,a.style.top=`${g-a.clientHeight/2}px`,makeDraggable(a),c.appendChild(a),selectCanvasElement(a)}function addPosition(){const a=document.getElementById("positionNumber").value,b=document.getElementById("positionMeaning").value;if(!b)return void alert("请输入位置含义");const c=document.createElement("div");c.className="position-marker",c.innerHTML=`${a}: ${b}`,c.dataset.positionNum=a,c.dataset.meaning=b,cardPositions.push({number:a,meaning:b,element:c}),addElementToWorld(c)}
+        function addCard(){const a=document.getElementById("cardSelect").value;if(!a)return void alert("请选择一张牌");const b=document.getElementById("rotation").value,c=document.getElementById("reversed").checked,d=allCards.find(f=>f.id==a),e=document.createElement("div");e.className="tarot-card";let g=parseInt(b)||0;c&&(g+=180),e.style.transform=`rotate(${g}deg)`,e.dataset.cardId=a,e.dataset.baseRotation=b,e.dataset.reversed=c;const h=document.createElement("img");h.className="card-image",h.src=d.customImageSrc||`data:image/svg+xml,${encodeURIComponent(generateDetailedCardSVG(d))}`,h.alt=d.name,e.appendChild(h),placedCards.push({card:d,element:e,rotation:b,reversed:c}),addElementToWorld(e)}
+        function makeDraggable(a){a.addEventListener("mousedown",onElementMouseDown),a.addEventListener("touchstart",onElementMouseDown,{passive:!1})}function selectCanvasElement(a){selectedElementOnCanvas&&selectedElementOnCanvas.classList.remove("selected"),selectedElementOnCanvas=a,selectedElementOnCanvas?(selectedElementOnCanvas.classList.add("selected"),document.getElementById("deleteSelectedButton").disabled=!1):document.getElementById("deleteSelectedButton").disabled=!0}function deselectCanvasElement(){selectedElementOnCanvas&&(selectedElementOnCanvas.classList.remove("selected"),selectedElementOnCanvas=null,document.getElementById("deleteSelectedButton").disabled=!0)}
+        function deleteSelectedElement(){selectedElementOnCanvas&&(selectedElementOnCanvas.classList.contains("tarot-card")?placedCards=placedCards.filter(a=>a.element!==selectedElementOnCanvas):selectedElementOnCanvas.classList.contains("position-marker")&&(cardPositions=cardPositions.filter(a=>a.element!==selectedElementOnCanvas)),selectedElementOnCanvas.remove(),deselectCanvasElement())}function setupCanvasInteractions(){const a=document.getElementById("canvas-viewport");a.addEventListener("mousedown",onViewportMouseDown),a.addEventListener("wheel",onWheel,{passive:!1}),document.addEventListener("keydown",b=>{("Delete"===b.key||"Backspace"===b.key)&&selectedElementOnCanvas&&"INPUT"!==document.activeElement.tagName&&"TEXTAREA"!==document.activeElement.tagName&&(b.preventDefault(),deleteSelectedElement())})}
+        function onElementMouseDown(a){a.stopPropagation(),isDraggingElement=!0,isPanning=!1,draggedElement=a.currentTarget,selectCanvasElement(draggedElement);const b=a.touches?a.touches[0]:a;dragStartMousePos={x:b.clientX,y:b.clientY},dragStartElementPos={x:parseFloat(draggedElement.style.left)||0,y:parseFloat(draggedElement.style.top)||0},document.addEventListener("mousemove",onDocumentMouseMove),document.addEventListener("mouseup",onDocumentMouseUp),document.addEventListener("touchmove",onDocumentMouseMove,{passive:!1}),document.addEventListener("touchend",onDocumentMouseUp)}
+        function onViewportMouseDown(a){("world"===a.target.id||"canvas-viewport"===a.target.id)&&(isPanning=!0,isDraggingElement=!1,dragStartMousePos={x:(a.touches?a.touches[0]:a).clientX,y:(a.touches?a.touches[0]:a).clientY},document.getElementById("canvas-viewport").classList.add("panning"),deselectCanvasElement(),document.addEventListener("mousemove",onDocumentMouseMove),document.addEventListener("mouseup",onDocumentMouseUp),document.addEventListener("touchmove",onDocumentMouseMove,{passive:!1}),document.addEventListener("touchend",onDocumentMouseUp))}
+        function onDocumentMouseMove(a){const b=a.touches?a.touches[0]:a,c=b.clientX-dragStartMousePos.x,d=b.clientY-dragStartMousePos.y;if(isPanning)panX+=c,panY+=d,dragStartMousePos={x:b.clientX,y:b.clientY},updateWorldTransform();else if(isDraggingElement){draggedElement.classList.add("dragging");let e=dragStartElementPos.x+c/scale,f=dragStartElementPos.y+d/scale;e=Math.round(e/SNAP_GRID_SIZE)*SNAP_GRID_SIZE,f=Math.round(f/SNAP_GRID_SIZE)*SNAP_GRID_SIZE,draggedElement.style.left=`${e}px`,draggedElement.style.top=`${f}px`}}
+        function onDocumentMouseUp(){isDraggingElement&&draggedElement.classList.remove("dragging"),isPanning&&document.getElementById("canvas-viewport").classList.remove("panning"),isDraggingElement=!1,isPanning=!1,draggedElement=null,document.removeEventListener("mousemove",onDocumentMouseMove),document.removeEventListener("mouseup",onDocumentMouseUp),document.removeEventListener("touchmove",onDocumentMouseMove),document.removeEventListener("touchend",onDocumentMouseUp)}
+        function onWheel(a){a.preventDefault();const b=document.getElementById("canvas-viewport"),c=b.getBoundingClientRect(),d=a.clientX-c.left,e=a.clientY-c.top,f=(d-panX)/scale,g=(e-panY)/scale;let h=0>a.deltaY?Math.min(2,1.1*scale):Math.max(.1,scale/1.1);panX=d-f*h,panY=e-g*h,scale=h,updateWorldTransform()}
+        function populateAllTemplateLists(){populateTemplateList(document.getElementById("commonSpreads")),populateTemplateList(document.getElementById("templateList"))}
+        function populateTemplateList(a){a.innerHTML="";const b={...spreadTemplates,...customSpreadTemplates};Object.values(b).forEach(c=>{const d=customSpreadTemplates.hasOwnProperty(c.name),e=document.createElement("div");e.className=`template-card ${d?"custom":""}`,e.onclick=f=>{f.target.classList.contains("delete-template-btn")||(loadTemplate(c),"templateList"===a.id&&closeModal("templateModal"))};const f=document.createElement("div");f.className="template-preview",c.positions.forEach(g=>{const h=document.createElement("div");h.className="mini-card",h.style.left=`${(g.x-4e3)/20}%`,h.style.top=`${(g.y-4e3)/20}%`,h.style.transform=`translate(-50%, -50%) rotate(${g.rotation||0}deg)`,f.appendChild(h)});const i=document.createElement("h3");i.textContent=c.name,e.appendChild(f),e.appendChild(i),d&&(j=document.createElement("button"),j.className="delete-template-btn",j.innerHTML="&times;",j.dataset.templateName=c.name,j.title=`删除模板 "${c.name}"`,e.appendChild(j)),a.appendChild(e)})}
+        function populateCommonSpreads(){populateTemplateList(document.getElementById("commonSpreads"))}
+        function showTemplates(){document.getElementById("templateModal").style.display="block",populateTemplateList(document.getElementById("templateList"))}
+        
+        // --- FIX: Loading a template no longer clears the canvas ---
+        function loadTemplate(a){
+            const b=document.getElementById("world");
+            a.positions.forEach(c=>{
+                const d=document.createElement("div");
+                d.className="position-marker",
+                d.style.left=`${c.x}px`,
+                d.style.top=`${c.y}px`,
+                d.style.transform=`rotate(${c.rotation||0}deg)`,
+                d.innerHTML=`${c.num}: ${c.meaning}`,
+                d.dataset.positionNum=c.num,
+                d.dataset.meaning=c.meaning,
+                makeDraggable(d),
+                b.appendChild(d),
+                cardPositions.push({number:c.num,meaning:c.meaning,element:d})
+            });
+            resetView()
+        }
+        
+        function clearCanvas(){document.getElementById("world").innerHTML="",cardPositions=[],placedCards=[],deselectCanvasElement()}function closeModal(a){a&&document.getElementById(a)&&(document.getElementById(a).style.display="none"),"cropModal"===a&&cropper&&closeCropModal()}
+        function showCardDetail(a){const b=document.getElementById("cardModal"),c=document.getElementById("cardDetail"),d=allCards.find(e=>e.id===a.id);c.innerHTML=`<h2>${d.name} ${d.engName?`(${d.engName})`:""}</h2><div style="text-align: center; margin: 20px 0;"><img src="${d.customImageSrc||`data:image/svg+xml,${encodeURIComponent(generateDetailedCardSVG(d))}`}" style="width: 200px; height: 300px; border-radius: 8px; box-shadow: var(--card-shadow); object-fit: cover;"></div>${d.meaning?`<h3>正位含义</h3><p>${d.meaning}</p><h3>逆位含义</h3><p>${d.reversed||"与正位含义相反或能量受阻"}</p>`:`<h3>牌面信息</h3><p>花色：${d.suit}</p>${d.number?`<p>数字：${d.number}</p>`:""}${d.court?`<p>宫廷牌：${d.court}</p>`:""}`}`,b.style.display="block"}
+        function saveSpread(){const a={positions:cardPositions.map(b=>({number:b.number,meaning:b.meaning,x:parseFloat(b.element.style.left),y:parseFloat(b.element.style.top),transform:b.element.style.transform})),cards:placedCards.map(b=>({cardId:b.card.id,cardName:b.card.name,x:parseFloat(b.element.style.left),y:parseFloat(b.element.style.top),transform:b.element.style.transform}))},b=JSON.stringify(a,null,2),c=new Blob([b],{type:"application/json"}),d=URL.createObjectURL(c),e=document.createElement("a");e.href=d,e.download=`塔罗牌阵-${(new Date).toISOString().slice(0,10)}.json`,e.click(),URL.revokeObjectURL(d)}
+        function handleImportSpread(a){const b=a.target.files[0];if(b){const c=new FileReader;c.onload=function(d){try{const e=JSON.parse(d.target.result);e&&(Array.isArray(e.positions)||Array.isArray(e.cards))?loadSpreadFromData(e):alert("导入失败：JSON文件格式不正确或缺少必要数据。")}catch(e){console.error("导入牌阵错误:",e),alert("导入失败：无法解析JSON文件。 "+e.message)}},c.readAsText(b),a.target.value=null}}
+        function loadSpreadFromData(a){clearCanvas();const b=document.getElementById("world");a.positions&&Array.isArray(a.positions)&&a.positions.forEach(c=>{const d=document.createElement("div");d.className="position-marker",d.style.left=`${c.x}px`||"4950px",d.style.top=`${c.y}px`||"4950px",d.style.transform=c.transform||"",d.innerHTML=`${c.number||"?"}: ${c.meaning||"未定义"}`,d.dataset.positionNum=c.number||"?",d.dataset.meaning=c.meaning||"未定义",makeDraggable(d),b.appendChild(d),cardPositions.push({number:c.number,meaning:c.meaning,element:d})}),a.cards&&Array.isArray(a.cards)&&a.cards.forEach(c=>{const d=allCards.find(f=>f.id==c.cardId);if(d){const e=document.createElement("div");e.className="tarot-card",e.style.left=`${c.x}px`||"4950px",e.style.top=`${c.y}px`||"4950px",e.style.transform=c.transform||"",e.dataset.cardId=d.id;const g=document.createElement("img");g.className="card-image",g.src=d.customImageSrc||`data:image/svg+xml,${encodeURIComponent(generateDetailedCardSVG(d))}`,g.alt=d.name,e.appendChild(g),makeDraggable(e),b.appendChild(e),placedCards.push({card:d,element:e})}else console.warn(`未找到ID为 ${c.cardId} 的卡片数据`)}),resetView(),alert("牌阵已成功导入！")}
+        
+        function resetView() {
+            const allElements = [...cardPositions.map(p => p.element), ...placedCards.map(c => c.element)];
+            if (allElements.length === 0) {
+                scale = 1.0;
+                const viewport = document.getElementById("canvas-viewport");
+                const viewportRect = viewport.getBoundingClientRect();
+                panX = viewportRect.width / 2 - 5000;
+                panY = viewportRect.height / 2 - 5000;
+                updateWorldTransform();
+                return;
+            }
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            allElements.forEach(el => {
+                const left = parseFloat(el.style.left);
+                const top = parseFloat(el.style.top);
+                const width = el.offsetWidth;
+                const height = el.offsetHeight;
+                minX = Math.min(minX, left);
+                minY = Math.min(minY, top);
+                maxX = Math.max(maxX, left + width);
+                maxY = Math.max(maxY, top + height);
+            });
+            const padding = 100;
+            minX -= padding; minY -= padding; maxX += padding; maxY += padding;
+            const centerX = (minX + maxX) / 2;
+            const centerY = (minY + maxY) / 2;
+            const boundingWidth = maxX - minX;
+            const boundingHeight = maxY - minY;
+            const viewport = document.getElementById("canvas-viewport");
+            const viewportRect = viewport.getBoundingClientRect();
+            const viewportWidth = viewportRect.width;
+            const viewportHeight = viewportRect.height;
+            const scaleX = viewportWidth / boundingWidth;
+            const scaleY = viewportHeight / boundingHeight;
+            scale = Math.min(scaleX, scaleY, 1.5);
+            scale = Math.max(scale, 0.1);
+            panX = viewportWidth / 2 - centerX * scale;
+            panY = viewportHeight / 2 - centerY * scale;
+            updateWorldTransform();
+        }
+
+        function handleImageUpload(event, cardId) {
+            const file = event.target.files[0];
+            if (!file) return;
+            sourceImageForProcessing = URL.createObjectURL(file);
+            currentCardIdForCropping = cardId;
+            document.getElementById('imageToProcess').src = sourceImageForProcessing;
+            document.getElementById('cropModal').style.display = 'block';
+            event.target.value = null;
+        }
+        
+        // --- FIX: Reworked export functions for reliability ---
+        function getElementsBoundingBox() {
+            const allElements = [...cardPositions.map(p => p.element), ...placedCards.map(c => c.element)];
+            if (allElements.length === 0) return null;
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            allElements.forEach(el => {
+                const left = parseFloat(el.style.left);
+                const top = parseFloat(el.style.top);
+                const width = el.offsetWidth;
+                const height = el.offsetHeight;
+                minX = Math.min(minX, left);
+                minY = Math.min(minY, top);
+                maxX = Math.max(maxX, left + width);
+                maxY = Math.max(maxY, top + height);
+            });
+            const padding = 50;
+            return {
+                x: minX - padding,
+                y: minY - padding,
+                width: (maxX - minX) + (padding * 2),
+                height: (maxY - minY) + (padding * 2)
+            };
+        }
+
+        async function renderSpreadToCanvas() {
+            deselectCanvasElement(); 
+            const world = document.getElementById('world');
+            const bounds = getElementsBoundingBox();
+            if (!bounds) {
+                alert("画布上没有内容可导出。");
+                return null; 
+            }
+
+            const renderContainer = document.createElement('div');
+            renderContainer.style.position = 'absolute';
+            renderContainer.style.left = '-9999px'; 
+            renderContainer.style.top = '-9999px';
+            renderContainer.style.width = `${bounds.width}px`;
+            renderContainer.style.height = `${bounds.height}px`;
+            renderContainer.style.backgroundColor = '#fdfdfa';
+            renderContainer.style.backgroundImage = `linear-gradient(rgba(139, 115, 85, 0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(139, 115, 85, 0.1) 1px, transparent 1px)`;
+            renderContainer.style.backgroundSize = `30px 30px`;
+            renderContainer.style.backgroundPosition = `-${bounds.x % 30}px -${bounds.y % 30}px`;
+
+            Array.from(world.children).forEach(child => {
+                if (child.classList.contains('tarot-card') || child.classList.contains('position-marker')) {
+                    const clone = child.cloneNode(true);
+                    const originalLeft = parseFloat(child.style.left) || 0;
+                    const originalTop = parseFloat(child.style.top) || 0;
+                    clone.style.left = `${originalLeft - bounds.x}px`;
+                    clone.style.top = `${originalTop - bounds.y}px`;
+                    clone.classList.remove('selected');
+                    renderContainer.appendChild(clone);
+                }
+            });
+
+            const watermark = document.createElement('div');
+            watermark.textContent = "星罗";
+            watermark.style.position = 'absolute';
+            watermark.style.right = '20px';
+            watermark.style.bottom = '20px';
+            watermark.style.color = 'rgba(0, 0, 0, 0.2)';
+            watermark.style.fontSize = '32px';
+            watermark.style.fontWeight = 'bold';
+            watermark.style.fontFamily = 'Microsoft YaHei, sans-serif';
+            watermark.style.textShadow = '1px 1px 2px rgba(255,255,255,0.3)';
+            watermark.style.pointerEvents = 'none';
+            renderContainer.appendChild(watermark);
+
+            document.body.appendChild(renderContainer);
+            let canvas = null;
+            try {
+                canvas = await html2canvas(renderContainer, {
+                    backgroundColor: null, 
+                    scale: 2,
+                    logging: false,
+                    useCORS: true
+                });
+            } catch (err) {
+                console.error("html2canvas failed:", err);
+                alert("生成图片失败，请查看控制台获取详细信息。");
+            } finally {
+                document.body.removeChild(renderContainer);
+            }
+            return canvas;
+        }
+
+        async function exportImage() {
+            const canvas = await renderSpreadToCanvas();
+            if (!canvas) return;
+            canvas.toBlob(blob => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `塔罗牌阵-${(new Date).toISOString().slice(0,10)}.png`;
+                a.click();
+                URL.revokeObjectURL(url);
+            });
+        }
+
+        async function copyAsImage() {
+            const canvas = await renderSpreadToCanvas();
+            if (!canvas) return;
+            try {
+                canvas.toBlob(async blob => {
+                    try {
+                        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+                        alert("牌阵已复制为图片！");
+                    } catch (err) {
+                        console.error("复制失败：", err);
+                        const dataUrl = canvas.toDataURL();
+                        const modal = document.createElement('div');
+                        modal.style.cssText = "position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); background: white; padding: 20px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); z-index: 3000; max-width: 90%; max-height: 90vh; overflow: auto;";
+                        modal.innerHTML = `<h3>右键点击图片并选择"复制图片"</h3><div style="margin-top: 10px;"><img src="${dataUrl}" style="max-width: 100%; border: 1px solid #ddd;"></div><button onclick="this.parentElement.remove()" style="margin-top: 10px; padding: 10px 20px; background: #d4af37; color: white; border: none; border-radius: 5px; cursor: pointer;">关闭</button>`;
+                        document.body.appendChild(modal);
+                    }
+                }, 'image/png');
+            } catch (e) {
+                console.error("生成图片blob失败：", e);
+                alert("复制图片失败，请尝试使用\"导出为图片\"功能");
+            }
+        }
+
+        window.onclick=function(a){a.target.classList.contains("modal")&&closeModal(a.target.id)};
+        function loadCustomTemplates(){const a=localStorage.getItem("customTarotSpreads");a&&Object.assign(customSpreadTemplates,JSON.parse(a))}
+        function saveCurrentSpreadAsTemplate(){if(0===cardPositions.length)return void alert("画布上没有位置标记，无法保存为空模板。");let a=prompt("请为您的牌阵模板命名:","我的自定义牌阵");if(a&&(a=a.trim())){if(!a)return void alert("模板名称不能为空！");if((spreadTemplates[a]||customSpreadTemplates[a])&&!confirm(`名为 "${a}" 的模板已存在。您想覆盖它吗？`))return;const b={name:a,positions:cardPositions.map(c=>({num:c.number,meaning:c.meaning,x:parseFloat(c.element.style.left),y:parseFloat(c.element.style.top),rotation:(c.element.style.transform.match(/rotate\(([^)]+)\)/)||["","0deg"])[1].replace("deg","")}))};customSpreadTemplates[a]=b;try{localStorage.setItem("customTarotSpreads",JSON.stringify(customSpreadTemplates)),alert(`模板 "${a}" 已成功保存！`),populateAllTemplateLists()}catch(c){alert("保存模板失败！浏览器存储空间可能已满。")}}}
+        function deleteCustomTemplate(a){a&&customSpreadTemplates[a]&&confirm(`您确定要删除自定义模板 "${a}" 吗？此操作不可撤销。`)&&(delete customSpreadTemplates[a],localStorage.setItem("customTarotSpreads",JSON.stringify(customSpreadTemplates)),alert(`模板 "${a}" 已删除。`),populateAllTemplateLists())}
+    </script>
+</body>
+</html>
